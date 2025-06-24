@@ -4,6 +4,9 @@
 #include <source_location>
 #include <format>
 #include <memory>
+#include <fstream>
+#include <iostream>
+#include <ctime>
 
 #include "bakkesmod/wrappers/cvarmanagerwrapper.h"
 
@@ -51,6 +54,7 @@ struct FormatWstring
 };
 
 
+// Log to BakkesMod console
 template <typename... Args>
 void LOG(std::string_view format_str, Args&&... args)
 {
@@ -63,7 +67,28 @@ void LOG(std::wstring_view format_str, Args&&... args)
 	_globalCvarManager->log(std::vformat(format_str, std::make_wformat_args(args...)));
 }
 
+// Log error to both console and file
+inline void LOG_ERROR(const std::string& message, const std::string& file = "error.log")
+{
+	// Log to BakkesMod console
+	_globalCvarManager->log("[ERROR] " + message);
+	// Log to std::cerr
+	std::cerr << "[ERROR] " << message << std::endl;
+	// Log to file with timestamp
+	std::ofstream out(file, std::ios::app);
+	if (out.is_open()) {
+		std::time_t t = std::time(nullptr);
+		char mbstr[64]{};
+		if (std::strftime(mbstr, sizeof(mbstr), "%Y-%m-%d %H:%M:%S", std::localtime(&t))) {
+			out << "[" << mbstr << "] [ERROR] " << message << std::endl;
+		} else {
+			out << "[ERROR] " << message << std::endl;
+		}
+		out.close();
+	}
+}
 
+// Debug log with location
 template <typename... Args>
 void DEBUGLOG(const FormatString& format_str, Args&&... args)
 {
