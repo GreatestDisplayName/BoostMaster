@@ -27,6 +27,9 @@ public:
     float cvarLowBoostTime{ 3.0f };
     float cvarMaxBoostTime{ 5.0f };
 
+    // New: Average boost per minute
+    float avgBoostPerMinute{ 0 };
+
     // UI windows
     std::shared_ptr<BoostHUDWindow>      hudWindow;
     std::shared_ptr<BoostSettingsWindow> settingsWindow;

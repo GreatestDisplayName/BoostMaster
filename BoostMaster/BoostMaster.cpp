@@ -53,6 +53,12 @@ void BoostMaster::onUnload()
 void BoostMaster::RenderFrame()
 {
     // This function is now a stub, as CarWrapper and boost tracking are not available in this SDK
+    // Example calculation for avgBoostPerMinute (stub):
+    if (totalBoostTime > 0) {
+        avgBoostPerMinute = (totalBoostUsed / totalBoostTime) * 60.0f;
+    } else {
+        avgBoostPerMinute = 0;
+    }
 }
 
 void BoostMaster::saveMatch()
