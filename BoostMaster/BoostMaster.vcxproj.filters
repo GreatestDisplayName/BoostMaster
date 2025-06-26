@@ -81,6 +81,12 @@
     <ClCompile Include="GuiBase.cpp">
       <Filter>Plugin\src</Filter>
     </ClCompile>
+    <ClCompile Include="BoostMasterUI.cpp">
+      <Filter>Plugin\src</Filter>
+    </ClCompile>
+    <ClCompile Include="logging.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="imgui\imgui_rangeslider.h">
@@ -138,6 +144,12 @@
       <Filter>Plugin\header</Filter>
     </ClInclude>
     <ClInclude Include="GuiBase.h">
+      <Filter>Plugin\header</Filter>
+    </ClInclude>
+    <ClInclude Include="resource.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="BoostMasterUI.h">
       <Filter>Plugin\header</Filter>
     </ClInclude>
   </ItemGroup>

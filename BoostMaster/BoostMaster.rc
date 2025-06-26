@@ -1,7 +1,6 @@
 // Microsoft Visual C++ generated resource script.
 //
 #include "resource.h"
-#include "version.h"
 
 #define APSTUDIO_READONLY_SYMBOLS
 /////////////////////////////////////////////////////////////////////////////
@@ -50,7 +49,7 @@ END
 
 
 /////////////////////////////////////////////////////////////////////////////
-// Norwegian Bokmål (Norway) resources
+// Norwegian BokmÃ¥l (Norway) resources
 
 #if !defined(AFX_RESOURCE_DLL) || defined(AFX_TARG_NOR)
 LANGUAGE LANG_NORWEGIAN, SUBLANG_NORWEGIAN_BOKMAL
@@ -62,8 +61,8 @@ LANGUAGE LANG_NORWEGIAN, SUBLANG_NORWEGIAN_BOKMAL
 //
 
 VS_VERSION_INFO VERSIONINFO
-FILEVERSION VERSION_MAJOR, VERSION_MINOR, VERSION_PATCH, VERSION_BUILD
-PRODUCTVERSION VERSION_MAJOR, VERSION_MINOR, VERSION_PATCH, VERSION_BUILD
+ FILEVERSION 1,0,0,34
+ PRODUCTVERSION 1,0,0,34
  FILEFLAGSMASK 0x3fL
 #ifdef _DEBUG
  FILEFLAGS 0x1L
@@ -80,12 +79,12 @@ BEGIN
         BEGIN
             VALUE "CompanyName", "TODO: <Company name>"
             VALUE "FileDescription", "TODO: <File description>"
-            VALUE "FileVersion", stringify(VERSION_MAJOR) "." stringify(VERSION_MINOR) "." stringify(VERSION_PATCH) "." stringify(VERSION_BUILD)
+            VALUE "FileVersion", "1.0.0.34"
             VALUE "InternalName", "BoostMaster.dll"
-            VALUE "LegalCopyright", "Copyright (C) 2020"
+            VALUE "LegalCopyright", "O"
             VALUE "OriginalFilename", "BoostMaster.dll"
             VALUE "ProductName", "TODO: <Product name>"
-            VALUE "ProductVersion", stringify(VERSION_MAJOR) "." stringify(VERSION_MINOR) "." stringify(VERSION_PATCH) "." stringify(VERSION_BUILD)
+            VALUE "ProductVersion", "1.0.0.34"
         END
     END
     BLOCK "VarFileInfo"
@@ -94,7 +93,7 @@ BEGIN
     END
 END
 
-#endif    // Norwegian Bokmål (Norway) resources
+#endif    // Norwegian BokmÃ¥l (Norway) resources
 /////////////////////////////////////////////////////////////////////////////
 
 
