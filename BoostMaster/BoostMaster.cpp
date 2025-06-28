@@ -18,6 +18,34 @@ BAKKESMOD_PLUGIN(BoostMaster, "Boost usage tracker and trainer", "1.0", PLUGINTY
 
 constexpr float TICK_INTERVAL = 1.0f / 120.0f;
 
+void BoostMaster::saveMatch() {
+    cvarManager->log("[BoostMaster] saveMatch invoked");
+    std::filesystem::create_directories("data");
+    std::ofstream out("data/boost_history.csv", std::ios::app);
+    out << totalBoostUsed << "," << (totalBoostTime / 60.0f) << "\n";
+    cvarManager->log("[BoostMaster] Match data saved");
+}
+
+void BoostMaster::RegisterDrawables() {
+    cvarManager->log("[BoostMaster] RegisterDrawables invoked");
+    if (!gameWrapper) return;
+    gameWrapper->RegisterDrawable([this](CanvasWrapper canvas) {
+        if (!lastPath.empty()) BoostPadHelper::DrawPathOverlayCanvas(this, canvas, lastPath);
+        });
+}
+
+void BoostMaster::ResetStats() {
+    cvarManager->log("[BoostMaster] ResetStats invoked");
+    totalBoostUsed = 0;
+    totalBoostTime = 0;
+    lastBoostAmt = -1;
+    bigPads = 0;
+    smallPads = 0;
+    efficiencyLog.clear();
+    lastPath.clear();
+    cvarManager->log("[BoostMaster] Stats reset");
+}
+
 void BoostMaster::onLoad() {
     try {
         cvarManager->log("[BoostMaster] onLoad called");
@@ -118,185 +146,4 @@ void BoostMaster::onLoad() {
     catch (const std::exception& ex) {
         cvarManager->log("[BoostMaster] Error in onLoad: " + std::string(ex.what()));
     }
-}
-
-void BoostMaster::onUnload() {
-    cvarManager->log("[BoostMaster] onUnload called");
-    UnregisterDrawables();
-    cvarManager->log("BoostMaster: Unloaded");
-}
-
-void BoostMaster::ResetStats() {
-    cvarManager->log("[BoostMaster] ResetStats invoked");
-    totalBoostUsed = 0;
-    totalBoostTime = 0;
-    lastBoostAmt = -1;
-    bigPads = 0;
-    smallPads = 0;
-    efficiencyLog.clear();
-    lastPath.clear();
-    cvarManager->log("[BoostMaster] Stats reset");
-}
-
-void BoostMaster::PrintPadPath() {
-    cvarManager->log("[BoostMaster] PrintPadPath invoked");
-    if (!gameWrapper || !gameWrapper->IsInFreeplay()) return;
-    auto car = gameWrapper->GetLocalCar();
-    auto server = gameWrapper->GetGameEventAsServer();
-    if (car.IsNull() || server.IsNull()) return;
-    auto ball = server.GetBall();
-    if (ball.IsNull()) return;
-
-    const auto& pads = BoostPadHelper::GetCachedPads(this);
-    auto graph = BoostPadGraph::Build(pads);
-    int start = BoostPadGraph::Nearest(graph, car.GetLocation());
-    int goal = BoostPadGraph::Nearest(graph, ball.GetLocation());
-    cvarManager->log("Path start=" + std::to_string(start) + " goal=" + std::to_string(goal));
-
-    lastPath = BoostPadGraph::FindPath(graph, start, goal, pathAlgo == 1);
-    std::ostringstream oss;
-    oss << "[BoostMaster] Path result:";
-    for (int idx : lastPath) oss << " -> idx=" << idx;
-    cvarManager->log(oss.str());
-
-    BoostPadHelper::DrawPath(this, lastPath);
-}
-
-void BoostMaster::saveMatch() {
-    cvarManager->log("[BoostMaster] saveMatch invoked");
-    std::filesystem::create_directories("data");
-    std::ofstream out("data/boost_history.csv", std::ios::app);
-    out << totalBoostUsed << "," << (totalBoostTime / 60.0f) << "\n";
-    cvarManager->log("[BoostMaster] Match data saved");
-}
-
-void BoostMaster::loadHistory() {
-    cvarManager->log("[BoostMaster] loadHistory invoked");
-    historyLog.clear();
-    std::ifstream in("data/boost_history.csv");
-    std::string line;
-    while (std::getline(in, line)) {
-        std::stringstream ss(line);
-        float used, perMin; char comma;
-        ss >> used >> comma >> perMin;
-        historyLog.push_back(perMin);
-    }
-    cvarManager->log("[BoostMaster] Loaded history entries=" + std::to_string(historyLog.size()));
-}
-
-// Save a custom training drill to file
-void BoostMaster::SaveTrainingDrill(const std::string& name) {
-    cvarManager->log("[BoostMaster] SaveTrainingDrill invoked: " + name);
-    auto car = gameWrapper->GetLocalCar();
-    auto server = gameWrapper->GetGameEventAsServer();
-    if (car.IsNull() || server.IsNull()) { cvarManager->log("Cannot save drill: car/server null"); return; }
-    auto ball = server.GetBall(); if (ball.IsNull()) { cvarManager->log("Cannot save drill: ball null"); return; }
-    TrainingDrill d;
-    d.name = name;
-    auto loc = car.GetLocation(); auto rot = car.GetRotation(); auto bl = ball.GetLocation(); auto vel = ball.GetVelocity();
-    d.carX = loc.X; d.carY = loc.Y; d.carZ = loc.Z;
-    d.carPitch = rot.Pitch; d.carYaw = rot.Yaw; d.carRoll = rot.Roll;
-    d.ballX = bl.X; d.ballY = bl.Y; d.ballZ = bl.Z;
-    d.ballVelX = vel.X; d.ballVelY = vel.Y; d.ballVelZ = vel.Z;
-    drills[name] = d;
-    SaveAllTrainingDrills();
-}
-
-// Load a saved training drill by name
-void BoostMaster::LoadTrainingDrill(const std::string& name) {
-    cvarManager->log("[BoostMaster] LoadTrainingDrill invoked: " + name);
-    auto it = drills.find(name);
-    if (it == drills.end()) { cvarManager->log("Drill not found: " + name); return; }
-    auto car = gameWrapper->GetLocalCar(); auto server = gameWrapper->GetGameEventAsServer();
-    if (car.IsNull() || server.IsNull()) { cvarManager->log("Cannot load drill: car/server null"); return; }
-    auto ball = server.GetBall(); if (ball.IsNull()) { cvarManager->log("Cannot load drill: ball null"); return; }
-    const auto& d = it->second;
-    car.SetLocation(Vector(d.carX, d.carY, d.carZ));
-    car.SetRotation(Rotator(d.carPitch, d.carYaw, d.carRoll));
-    ball.SetLocation(Vector(d.ballX, d.ballY, d.ballZ));
-    ball.SetVelocity(Vector(d.ballVelX, d.ballVelY, d.ballVelZ));
-}
-
-// List saved training drills
-void BoostMaster::ListTrainingDrills() {
-    cvarManager->log("[BoostMaster] ListTrainingDrills invoked");
-    if (drills.empty()) { cvarManager->log("No drills saved"); return; }
-    for (const auto& p : drills) cvarManager->log("  " + p.first);
-}
-
-// Delete a named training drill
-void BoostMaster::DeleteTrainingDrill(const std::string& name) {
-    cvarManager->log("[BoostMaster] DeleteTrainingDrill invoked: " + name);
-    if (drills.erase(name)) {
-        SaveAllTrainingDrills();
-    }
-    else {
-        cvarManager->log("Drill not found: " + name);
-    }
-}
-
-// Load all drills from JSON
-void BoostMaster::LoadAllTrainingDrills() {
-    cvarManager->log("[BoostMaster] LoadAllTrainingDrills invoked");
-    drills.clear();
-    std::ifstream in("data/training_drills.json"); if (!in) return;
-    json j; in >> j;
-    for (auto it = j.begin(); it != j.end(); ++it) {
-        const std::string& name = it.key(); const json& val = it.value();
-        TrainingDrill d;
-        d.name = name;
-        d.carX = val.value("carX", 0.0f);
-        d.carY = val.value("carY", 0.0f);
-        d.carZ = val.value("carZ", 0.0f);
-        d.carPitch = val.value("carPitch", 0.0f);
-        d.carYaw = val.value("carYaw", 0.0f);
-        d.carRoll = val.value("carRoll", 0.0f);
-        d.ballX = val.value("ballX", 0.0f);
-        d.ballY = val.value("ballY", 0.0f);
-        d.ballZ = val.value("ballZ", 0.0f);
-        d.ballVelX = val.value("ballVelX", 0.0f);
-        d.ballVelY = val.value("ballVelY", 0.0f);
-        d.ballVelZ = val.value("ballVelZ", 0.0f);
-        drills[name] = d;
-    }
-}
-
-// Save all drills to JSON
-void BoostMaster::SaveAllTrainingDrills() {
-    cvarManager->log("[BoostMaster] SaveAllTrainingDrills invoked");
-    std::filesystem::create_directories("data");
-    json root;
-    for (const auto& p : drills) {
-        const auto& d = p.second;
-        root[p.first]["carX"] = d.carX;
-        root[p.first]["carY"] = d.carY;
-        root[p.first]["carZ"] = d.carZ;
-        root[p.first]["carPitch"] = d.carPitch;
-        root[p.first]["carYaw"] = d.carYaw;
-        root[p.first]["carRoll"] = d.carRoll;
-        root[p.first]["ballX"] = d.ballX;
-        root[p.first]["ballY"] = d.ballY;
-        root[p.first]["ballZ"] = d.ballZ;
-        root[p.first]["ballVelX"] = d.ballVelX;
-        root[p.first]["ballVelY"] = d.ballVelY;
-        root[p.first]["ballVelZ"] = d.ballVelZ;
-    }
-    std::ofstream out("data/training_drills.json");
-    out << std::setw(4) << root;
-}
-
-// Register in-game drawable overlay
-void BoostMaster::RegisterDrawables() {
-    cvarManager->log("[BoostMaster] RegisterDrawables invoked");
-    if (!gameWrapper) return;
-    gameWrapper->RegisterDrawable([this](CanvasWrapper canvas) {
-        if (!lastPath.empty()) BoostPadHelper::DrawPathOverlay(this, lastPath);
-        });
-}
-
-// Unregister drawables
-void BoostMaster::UnregisterDrawables() {
-    cvarManager->log("[BoostMaster] UnregisterDrawables invoked");
-    if (!gameWrapper) return;
-    gameWrapper->UnregisterDrawables();
 }
