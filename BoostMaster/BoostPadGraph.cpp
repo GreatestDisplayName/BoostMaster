@@ -1,76 +1,80 @@
 #include "pch.h"
 #include "BoostPadGraph.h"
-#include "BoostPadHelper.h"
+#include <vector>
 #include <queue>
-#include <unordered_map>
+#include <limits>
 #include <cmath>
 
-std::vector<PadNode> BoostPadGraph::Build(GameWrapper* gw) {
-    std::vector<PadNode> g;
-    auto pads = BoostPadHelper::GetAllPads(gw);
+// Helper: Euclidean distance
+static float dist(const Vector& a, const Vector& b) {
+    float dx = a.X - b.X, dy = a.Y - b.Y, dz = a.Z - b.Z;
+    return std::sqrt(dx*dx + dy*dy + dz*dz);
+}
+
+// Build a simple fully-connected graph (all pads are neighbors)
+std::vector<PadNode> BoostPadGraph::Build(const std::vector<StaticBoostPad>& pads) {
+    std::vector<PadNode> graph;
     for (size_t i = 0; i < pads.size(); ++i) {
-        PadNode n{ pads[i], {} };
-        g.push_back(n);
-    }
-    int n = static_cast<int>(g.size());
-    for (int i = 0; i < n; ++i)
-        for (int j = i + 1; j < n; ++j) {
-            g[i].neighbors.push_back(j);
-            g[j].neighbors.push_back(i);
+        PadNode node;
+        node.index = static_cast<int>(i);
+        node.pad = &pads[i];
+        // Optionally, only connect to nearby pads (here: all pads are neighbors)
+        for (size_t j = 0; j < pads.size(); ++j) {
+            if (i != j) node.neighbors.push_back(static_cast<int>(j));
         }
-    return g;
+        graph.push_back(node);
+    }
+    return graph;
 }
 
-int BoostPadGraph::Nearest(const std::vector<PadNode>& g, const Vector& loc) {
-    int best = -1;
-    float bd = FLT_MAX;
-    for (int i = 0; i < (int)g.size(); ++i) {
-        auto p = g[i].pad.GetLocation();
-        float dx = p.X - loc.X, dy = p.Y - loc.Y, dz = p.Z - loc.Z;
-        float d = sqrt(dx * dx + dy * dy + dz * dz);
-        if (d < bd) {
-            bd = d;
-            best = i;
+// Find the nearest pad to a location
+int BoostPadGraph::Nearest(const std::vector<PadNode>& graph, const Vector& loc) {
+    float bestDist = std::numeric_limits<float>::max();
+    int bestIdx = 0;
+    for (const auto& node : graph) {
+        float d = dist(node.pad->location, loc);
+        if (d < bestDist) {
+            bestDist = d;
+            bestIdx = node.index;
         }
     }
-    return best;
+    return bestIdx;
 }
 
-std::vector<int> BoostPadGraph::FindPath(const std::vector<PadNode>& g, int start, int goal) {
-    std::vector<int> path;
-    if (start < 0 || goal < 0 || start >= (int)g.size() || goal >= (int)g.size()) return path;
-    auto heuristic = [&](int a, int b) {
-        auto pa = g[a].pad.GetLocation(), pb = g[b].pad.GetLocation();
-        float dx = pa.X - pb.X, dy = pa.Y - pb.Y, dz = pa.Z - pb.Z;
-        return sqrt(dx * dx + dy * dy + dz * dz);
+// Dijkstra's or A* algorithm for shortest path (by distance)
+std::vector<int> BoostPadGraph::FindPath(const std::vector<PadNode>& graph, int start, int goal, bool useAStar) {
+    if (graph.empty() || start < 0 || start >= (int)graph.size() || goal < 0 || goal >= (int)graph.size()) {
+        LOG_ERROR("FindPath called with empty graph or invalid indices.");
+        return {};
+    }
+    std::vector<float> cost(graph.size(), std::numeric_limits<float>::max());
+    std::vector<int> prev(graph.size(), -1);
+    cost[start] = 0;
+    using Pair = std::pair<float, int>;
+    auto heuristic = [&](int idx) {
+        if (!useAStar) return 0.0f;
+        return dist(graph[idx].pad->location, graph[goal].pad->location);
     };
-    std::unordered_map<int, float> gS;
-    std::unordered_map<int, int> cf;
-    auto cmp = [&](int l, int r) { return (gS[l] + heuristic(l, goal)) > (gS[r] + heuristic(r, goal)); };
-    std::priority_queue<int, std::vector<int>, decltype(cmp)> open(cmp);
-    gS[start] = 0;
-    open.push(start);
-    while (!open.empty()) {
-        int cur = open.top();
-        open.pop();
-        if (cur == goal) {
-            int n = goal;
-            while (cf.count(n)) {
-                path.push_back(n);
-                n = cf[n];
-            }
-            path.push_back(start);
-            std::reverse(path.begin(), path.end());
-            return path;
-        }
-        for (int nb : g[cur].neighbors) {
-            float t = gS[cur] + heuristic(cur, nb);
-            if (!gS.count(nb) || t < gS[nb]) {
-                cf[nb] = cur;
-                gS[nb] = t;
-                open.push(nb);
+    std::priority_queue<Pair, std::vector<Pair>, std::greater<Pair>> q;
+    q.emplace(Pair(heuristic(start), start));
+    while (!q.empty()) {
+        auto [c, u] = q.top(); q.pop();
+        if (u == goal) break;
+        for (int v : graph[u].neighbors) {
+            float alt = cost[u] + dist(graph[u].pad->location, graph[v].pad->location);
+            if (alt < cost[v]) {
+                cost[v] = alt;
+                prev[v] = u;
+                q.emplace(Pair(alt + heuristic(v), v));
             }
         }
+    }
+    std::vector<int> path;
+    for (int at = goal; at != -1; at = prev[at]) path.push_back(at);
+    std::reverse(path.begin(), path.end());
+    if (path.empty() || path.front() != start) {
+        LOG_ERROR("FindPath failed to find a valid path.");
+        path.clear();
     }
     return path;
 }

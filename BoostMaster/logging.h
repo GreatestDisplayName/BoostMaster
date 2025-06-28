@@ -54,19 +54,30 @@ struct FormatWstring
 template <typename... Args>
 void LOG(std::string_view fmt, Args&&... args)
 {
-    _globalCvarManager->log(std::vformat(fmt, std::make_format_args(args...)));
+    if (_globalCvarManager) {
+        _globalCvarManager->log(std::vformat(fmt, std::make_format_args(args...)));
+    } else {
+        std::cerr << std::vformat(fmt, std::make_format_args(args...)) << std::endl;
+    }
 }
 
 template <typename... Args>
 void LOG(std::wstring_view fmt, Args&&... args)
 {
-    _globalCvarManager->log(std::vformat(fmt, std::make_wformat_args(args...)));
+    if (_globalCvarManager) {
+        _globalCvarManager->log(std::vformat(fmt, std::make_wformat_args(args...)));
+    } else {
+        // Fallback: print as narrow string
+        std::wcerr << std::vformat(fmt, std::make_wformat_args(args...)) << std::endl;
+    }
 }
 
 // Log error to both console and file
 inline void LOG_ERROR(const std::string& msg, const std::string& file = "error.log")
 {
-    _globalCvarManager->log("[ERROR] " + msg);
+    if (_globalCvarManager) {
+        _globalCvarManager->log("[ERROR] " + msg);
+    }
     std::cerr << "[ERROR] " << msg << std::endl;
     std::ofstream out(file, std::ios::app);
     if (out) {
@@ -88,7 +99,11 @@ void DEBUGLOG(const FormatString& fs, Args&&... args)
     if constexpr (DEBUG_LOG) {
         auto text = std::vformat(fs.str, std::make_format_args(args...));
         auto loc = fs.GetLocation();
-        _globalCvarManager->log(std::format("{} {}", text, loc));
+        if (_globalCvarManager) {
+            _globalCvarManager->log(std::format("{} {}", text, loc));
+        } else {
+            std::cerr << text << " " << loc << std::endl;
+        }
     }
 }
 
@@ -98,6 +113,10 @@ void DEBUGLOG(const FormatWstring& fs, Args&&... args)
     if constexpr (DEBUG_LOG) {
         auto text = std::vformat(fs.str, std::make_wformat_args(args...));
         auto loc = fs.GetLocation();
-        _globalCvarManager->log(std::format(L"{} {}", text, loc));
+        if (_globalCvarManager) {
+            _globalCvarManager->log(std::format(L"{} {}", text, loc));
+        } else {
+            std::wcerr << text << L" " << loc << std::endl;
+        }
     }
 }

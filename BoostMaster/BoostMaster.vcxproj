@@ -64,8 +64,11 @@
     </PreBuildEvent>
   </ItemDefinitionGroup>
   <ItemGroup>
+    <ClCompile Include="BoostHUDWindow.cpp" />
     <ClCompile Include="BoostMasterUI.cpp" />
     <ClCompile Include="BoostPadGraph.cpp" />
+    <ClCompile Include="BoostPadHelper.cpp" />
+    <ClCompile Include="BoostSettingsWindow.cpp" />
     <ClCompile Include="imgui\imgui.cpp" />
     <ClCompile Include="imgui\imguivariouscontrols.cpp" />
     <ClCompile Include="imgui\imgui_additions.cpp" />
@@ -86,9 +89,12 @@
     <ClCompile Include="GuiBase.cpp" />
   </ItemGroup>
   <ItemGroup>
+    <ClInclude Include="BoostHUDWindow.h" />
     <ClInclude Include="BoostMasterUI.h" />
+    <ClInclude Include="BoostPadData.h" />
     <ClInclude Include="BoostPadGraph.h" />
     <ClInclude Include="BoostPadHelper.h" />
+    <ClInclude Include="BoostSettingsWindow.h" />
     <ClInclude Include="imgui\imconfig.h" />
     <ClInclude Include="imgui\imgui.h" />
     <ClInclude Include="imgui\imguivariouscontrols.h" />
