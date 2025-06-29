@@ -2,6 +2,7 @@
 #include "BoostMaster.h"
 #include "BoostMasterUI.h"
 #include "BoostPadHelper.h"
+#include "BoostPadGraph.h"
 #include "BoostHUDWindow.h"
 #include "BoostSettingsWindow.h"
 #include <filesystem>
@@ -26,14 +27,6 @@ void BoostMaster::saveMatch() {
     cvarManager->log("[BoostMaster] Match data saved");
 }
 
-void BoostMaster::RegisterDrawables() {
-    cvarManager->log("[BoostMaster] RegisterDrawables invoked");
-    if (!gameWrapper) return;
-    gameWrapper->RegisterDrawable([this](CanvasWrapper canvas) {
-        if (!lastPath.empty()) BoostPadHelper::DrawPathOverlayCanvas(this, canvas, lastPath);
-        });
-}
-
 void BoostMaster::ResetStats() {
     cvarManager->log("[BoostMaster] ResetStats invoked");
     totalBoostUsed = 0;
@@ -44,6 +37,47 @@ void BoostMaster::ResetStats() {
     efficiencyLog.clear();
     lastPath.clear();
     cvarManager->log("[BoostMaster] Stats reset");
+}
+
+void BoostMaster::PrintPadPath() {
+    cvarManager->log("[BoostMaster] PrintPadPath invoked");
+    if (!gameWrapper || !gameWrapper->IsInFreeplay()) return;
+
+    auto car = gameWrapper->GetLocalCar();
+    auto server = gameWrapper->GetGameEventAsServer();
+    if (car.IsNull() || server.IsNull()) return;
+    auto ball = server.GetBall();
+    if (ball.IsNull()) return;
+
+    const auto& pads = BoostPadHelper::GetCachedPads(this);
+    auto graph = BoostPadGraph::Build(pads);
+    int start = BoostPadGraph::Nearest(graph, car.GetLocation());
+    int goal = BoostPadGraph::Nearest(graph, ball.GetLocation());
+
+    cvarManager->log("Path start=" + std::to_string(start) + " goal=" + std::to_string(goal));
+    lastPath = BoostPadGraph::FindPath(graph, start, goal, pathAlgo == 1);
+
+    std::ostringstream oss;
+    oss << "[BoostMaster] Path result:";
+    for (int idx : lastPath) oss << " -> " << idx;
+    cvarManager->log(oss.str());
+
+    BoostPadHelper::DrawPath(this, lastPath);
+}
+
+void BoostMaster::RegisterDrawables() {
+    cvarManager->log("[BoostMaster] RegisterDrawables invoked");
+    if (!gameWrapper) return;
+    gameWrapper->RegisterDrawable([this](CanvasWrapper canvas) {
+        if (!lastPath.empty())
+            BoostPadHelper::DrawPathOverlayCanvas(this, canvas, lastPath);
+        });
+}
+
+void BoostMaster::UnregisterDrawables() {
+    cvarManager->log("[BoostMaster] UnregisterDrawables invoked");
+    if (!gameWrapper) return;
+    gameWrapper->UnregisterDrawables();
 }
 
 void BoostMaster::onLoad() {
@@ -57,25 +91,35 @@ void BoostMaster::onLoad() {
 
         // Reset stats
         cvarManager->registerNotifier("boostmaster_reset", [this](const std::vector<std::string>&) {
-            cvarManager->log("[BoostMaster] boostmaster_reset invoked");
             ResetStats();
             }, "Reset stats", PERMISSION_ALL);
 
         // Print pad path
         cvarManager->registerNotifier("boostmaster_printpath", [this](const std::vector<std::string>&) {
-            cvarManager->log("[BoostMaster] boostmaster_printpath invoked");
             PrintPadPath();
             }, "Print the current boost pad path", PERMISSION_ALL);
 
         // Toggle pad visualization
         cvarManager->registerNotifier("boostmaster_showpads", [this](const std::vector<std::string>&) {
-            cvarManager->log("[BoostMaster] boostmaster_showpads invoked");
             BoostSettingsWindow::ToggleShowPads();
             }, "Toggle boost pad visualization", PERMISSION_ALL);
 
-        // Help
+        // Training drill commands
+        cvarManager->registerNotifier("boostmaster_savetraining", [this](const std::vector<std::string>& args) {
+            if (!args.empty()) SaveTrainingDrill(args[0]);
+            }, "Save training drill", PERMISSION_ALL);
+        cvarManager->registerNotifier("boostmaster_loadtraining", [this](const std::vector<std::string>& args) {
+            if (!args.empty()) LoadTrainingDrill(args[0]);
+            }, "Load training drill", PERMISSION_ALL);
+        cvarManager->registerNotifier("boostmaster_listtraining", [this](const std::vector<std::string>&) {
+            ListTrainingDrills();
+            }, "List training drills", PERMISSION_ALL);
+        cvarManager->registerNotifier("boostmaster_deltraining", [this](const std::vector<std::string>& args) {
+            if (!args.empty()) DeleteTrainingDrill(args[0]);
+            }, "Delete training drill", PERMISSION_ALL);
+
+        // Help command
         cvarManager->registerNotifier("boostmaster_help", [this](const std::vector<std::string>&) {
-            cvarManager->log("[BoostMaster] boostmaster_help invoked");
             cvarManager->log("Available commands:");
             cvarManager->log("  boostmaster_reset");
             cvarManager->log("  boostmaster_printpath");
@@ -83,9 +127,8 @@ void BoostMaster::onLoad() {
             cvarManager->log("  boostmaster_config");
             }, "Show help message", PERMISSION_ALL);
 
-        // Config
+        // Config handler
         cvarManager->registerNotifier("boostmaster_config", [this](const std::vector<std::string>& args) {
-            cvarManager->log("[BoostMaster] boostmaster_config invoked");
             if (args.empty() || args[0] == "help") {
                 cvarManager->log("Config: lowthreshold=" + std::to_string(cvarLowBoostThresh) +
                     ", lowtime=" + std::to_string(cvarLowBoostTime) +
@@ -96,54 +139,33 @@ void BoostMaster::onLoad() {
                 if (args[0] == "lowthreshold") cvarLowBoostThresh = val;
                 else if (args[0] == "lowtime") cvarLowBoostTime = val;
                 else if (args[0] == "maxtime") cvarMaxBoostTime = val;
-                else { cvarManager->log("Unknown config option: " + args[0]); return; }
+                else return;
                 cvarManager->log("[BoostMaster] " + args[0] + " set to " + args[1]);
             }
             else {
                 cvarManager->log("Usage: boostmaster_config <option> <value>");
             }
-            }, "Show or set config", PERMISSION_ALL);
+            }, "Configure thresholds", PERMISSION_ALL);
 
-        // Hook match end
+        // Match hook
         gameWrapper->HookEvent("Function TAGame.GameEvent_Soccar_TA.EventMatchEnded", [this](const std::string&) {
-            cvarManager->log("[BoostMaster] EventMatchEnded hook triggered");
             saveMatch();
             });
 
-        // UI windows
+        // UI
         hudWindow = std::make_shared<BoostHUDWindow>(this);
         settingsWindow = std::make_shared<BoostSettingsWindow>(this);
+
         RegisterDrawables();
-
-        // Training drills
         LoadAllTrainingDrills();
-        cvarManager->registerNotifier("boostmaster_savetraining", [this](const std::vector<std::string>& args) {
-            if (!args.empty()) {
-                cvarManager->log("[BoostMaster] Saving training drill: " + args[0]);
-                SaveTrainingDrill(args[0]);
-            }
-            }, "Save training drill", PERMISSION_ALL);
-        cvarManager->registerNotifier("boostmaster_loadtraining", [this](const std::vector<std::string>& args) {
-            if (!args.empty()) {
-                cvarManager->log("[BoostMaster] Loading training drill: " + args[0]);
-                LoadTrainingDrill(args[0]);
-            }
-            }, "Load training drill", PERMISSION_ALL);
-        cvarManager->registerNotifier("boostmaster_listtraining", [this](const std::vector<std::string>&) {
-            cvarManager->log("[BoostMaster] Listing training drills");
-            ListTrainingDrills();
-            }, "List training drills", PERMISSION_ALL);
-        cvarManager->registerNotifier("boostmaster_deltraining", [this](const std::vector<std::string>& args) {
-            if (!args.empty()) {
-                cvarManager->log("[BoostMaster] Deleting training drill: " + args[0]);
-                DeleteTrainingDrill(args[0]);
-            }
-            }, "Delete training drill", PERMISSION_ALL);
-
-        // History
         loadHistory();
     }
     catch (const std::exception& ex) {
         cvarManager->log("[BoostMaster] Error in onLoad: " + std::string(ex.what()));
     }
+}
+
+void BoostMaster::onUnload() {
+    UnregisterDrawables();
+    cvarManager->log("BoostMaster: Unloaded");
 }
