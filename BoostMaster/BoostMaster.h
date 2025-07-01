@@ -6,9 +6,11 @@
 #include <memory>
 #include "bakkesmod/plugin/bakkesmodplugin.h"
 #include "bakkesmod/wrappers/CanvasWrapper.h"
-#include "BoostHUDWindow.h"
-#include "BoostSettingsWindow.h"
 #include "BoostPadHelper.h"
+
+// Forward declarations to avoid circular dependencies
+class BoostHUDWindow;
+class BoostSettingsWindow;
 
 struct TrainingDrill {
     std::string name;
@@ -48,6 +50,7 @@ public:
 
     float totalBoostUsed = 0.0f;
     float totalBoostTime = 0.0f;
+    float avgBoostPerMinute = 0.0f;
 
     int bigPads = 0;
     int smallPads = 0;

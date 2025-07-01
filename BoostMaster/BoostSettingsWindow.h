@@ -1,11 +1,13 @@
 #pragma once
 #include "bakkesmod/plugin/PluginSettingsWindow.h"
-#include "BoostMaster.h"
 #include "BoostPadData.h"
 #include <string>
 #include <optional>
 
 extern int pathAlgo; // Expose pathAlgo for adaptive pathfinding
+
+// Forward declaration to avoid circular dependency
+class BoostMaster;
 
 class BoostSettingsWindow : public BakkesMod::Plugin::PluginSettingsWindow {
 public:

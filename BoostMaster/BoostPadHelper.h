@@ -1,10 +1,12 @@
 #pragma once
 
-#include "BoostMaster.h"
 #include "BoostPadData.h"
+#include "bakkesmod/wrappers/CanvasWrapper.h"
 #include <vector>
 #include <optional>
-#include "bakkesmod/wrappers/CanvasWrapper.h"
+
+// Forward declaration to avoid circular dependency
+class BoostMaster;
 
 class BoostPadHelper {
 public:

@@ -1,7 +1,9 @@
 #pragma once
 #include "bakkesmod/plugin/PluginWindow.h"
-#include "BoostMaster.h"
 #include <string>
+
+// Forward declaration to avoid circular dependency
+class BoostMaster;
 
 class BoostHUDWindow : public BakkesMod::Plugin::PluginWindow {
 public:
