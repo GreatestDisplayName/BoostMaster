@@ -1,5 +1,6 @@
 #include "pch.h"
 #include "BoostHUDWindow.h"
+#include "BoostMaster.h"
 #include "imgui/imgui.h"
 #include "BoostPadHelper.h"
 #include <vector>
