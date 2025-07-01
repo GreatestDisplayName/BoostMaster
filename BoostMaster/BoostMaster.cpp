@@ -161,7 +161,7 @@ void BoostMaster::onLoad() {
 
         RegisterDrawables();
         LoadAllTrainingDrills();
-        loadHistory();
+        this->loadHistory();
     }
     catch (const std::exception& ex) {
         cvarManager->log("[BoostMaster] Error in onLoad: " + std::string(ex.what()));
@@ -250,9 +250,9 @@ void BoostMaster::LoadTrainingDrill(const std::string& name) {
 
     // Set car position and rotation
     car.SetLocation(Vector{ drill.carX, drill.carY, drill.carZ });
-    car.SetRotation(Rotator{ drill.carPitch, drill.carYaw, drill.carRoll });
+    car.SetRotation(Rotator{ static_cast<int>(drill.carPitch), static_cast<int>(drill.carYaw), static_cast<int>(drill.carRoll) });
     car.SetVelocity(Vector{ 0, 0, 0 });
-    car.SetAngularVelocity(Vector{ 0, 0, 0 });
+    car.SetAngularVelocity(Vector{ 0, 0, 0 }, Vector{ 0, 0, 1 });
     
     // Set ball position and velocity
     ball.SetLocation(Vector{ drill.ballX, drill.ballY, drill.ballZ });
@@ -365,16 +365,16 @@ void BoostMaster::SaveAllTrainingDrills() {
 }
 
 void BoostMaster::loadHistory() {
-    cvarManager->log("[BoostMaster] loadHistory invoked");
+    this->cvarManager->log("[BoostMaster] loadHistory invoked");
     try {
         std::filesystem::create_directories("data");
         std::ifstream file("data/boost_history.csv");
         if (!file.is_open()) {
-            cvarManager->log("[BoostMaster] No boost history file found, starting fresh");
+            this->cvarManager->log("[BoostMaster] No boost history file found, starting fresh");
             return;
         }
         
-        historyLog.clear();
+        this->historyLog.clear();
         std::string line;
         while (std::getline(file, line)) {
             if (line.empty()) continue;
@@ -385,7 +385,7 @@ void BoostMaster::loadHistory() {
             if (std::getline(iss, boostUsed, ',') && std::getline(iss, playTime)) {
                 try {
                     float efficiency = std::stof(boostUsed) / std::max(0.1f, std::stof(playTime));
-                    historyLog.push_back(efficiency);
+                    this->historyLog.push_back(efficiency);
                 }
                 catch (...) {
                     // Skip invalid lines
@@ -394,9 +394,9 @@ void BoostMaster::loadHistory() {
         }
         file.close();
         
-        cvarManager->log("[BoostMaster] Loaded " + std::to_string(historyLog.size()) + " history entries");
+        this->cvarManager->log("[BoostMaster] Loaded " + std::to_string(this->historyLog.size()) + " history entries");
     }
     catch (const std::exception& ex) {
-        cvarManager->log("[BoostMaster] Error loading history: " + std::string(ex.what()));
+        this->cvarManager->log("[BoostMaster] Error loading history: " + std::string(ex.what()));
     }
 }

@@ -35,6 +35,7 @@ public:
     void DeleteTrainingDrill(const std::string& name);
     void LoadAllTrainingDrills();
     void SaveAllTrainingDrills();
+    void loadHistory();
 
     void RegisterDrawables();
     void UnregisterDrawables();
