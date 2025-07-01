@@ -66,11 +66,15 @@ void BoostMaster::PrintPadPath() {
 }
 
 void BoostMaster::RegisterDrawables() {
-    cvarManager->log("[BoostMaster] RegisterDrawables invoked");
+    Logger::Log(LogLevel::INFO, "Rendering", "RegisterDrawables invoked");
     if (!gameWrapper) return;
     gameWrapper->RegisterDrawable([this](CanvasWrapper canvas) {
+        // Draw path overlay
         if (!lastPath.empty())
             BoostPadHelper::DrawPathOverlayCanvas(this, canvas, lastPath);
+        
+        // Draw advanced overlay
+        RenderAdvancedOverlay(canvas);
         });
 }
 
@@ -82,10 +86,13 @@ void BoostMaster::UnregisterDrawables() {
 
 void BoostMaster::onLoad() {
     try {
-        cvarManager->log("[BoostMaster] onLoad called");
+        Logger::Log(LogLevel::INFO, "Core", "BoostMaster onLoad called");
 
         // Initialize global cvar manager for logging
         _globalCvarManager = cvarManager;
+        
+        // Initialize advanced systems
+        InitializeAdvancedSystems();
 
         // Register CVars
         cvarManager->registerCvar("boostmaster_lowthreshold", std::to_string(cvarLowBoostThresh), "% below which boost is low", true, true, 0.0f, true, 100.0f);
@@ -121,13 +128,44 @@ void BoostMaster::onLoad() {
             if (!args.empty()) DeleteTrainingDrill(args[0]);
             }, "Delete training drill", PERMISSION_ALL);
 
+        // Advanced analytics commands
+        cvarManager->registerNotifier("boostmaster_report", [this](const std::vector<std::string>&) {
+            GenerateSessionReport();
+            }, "Generate session performance report", PERMISSION_ALL);
+            
+        cvarManager->registerNotifier("boostmaster_playstyle", [this](const std::vector<std::string>&) {
+            AnalyzePlaystyle();
+            }, "Analyze current playstyle", PERMISSION_ALL);
+            
+        cvarManager->registerNotifier("boostmaster_clearheatmap", [this](const std::vector<std::string>&) {
+            if (heatmapGenerator) {
+                heatmapGenerator->ClearData();
+                Logger::Log(LogLevel::INFO, "Commands", "Heatmap data cleared");
+            }
+            }, "Clear heatmap data", PERMISSION_ALL);
+            
+        cvarManager->registerNotifier("boostmaster_exportheatmap", [this](const std::vector<std::string>& args) {
+            if (heatmapGenerator) {
+                std::string filename = args.empty() ? "session_heatmap" : args[0];
+                heatmapGenerator->ExportHeatmap(filename);
+            }
+            }, "Export heatmap data", PERMISSION_ALL);
+            
+        cvarManager->registerNotifier("boostmaster_performance", [this](const std::vector<std::string>&) {
+            PerformanceProfiler::PrintReport();
+            }, "Show performance profiling report", PERMISSION_ALL);
+
         // Help command
         cvarManager->registerNotifier("boostmaster_help", [this](const std::vector<std::string>&) {
-            cvarManager->log("Available commands:");
-            cvarManager->log("  boostmaster_reset");
-            cvarManager->log("  boostmaster_printpath");
-            cvarManager->log("  boostmaster_showpads");
-            cvarManager->log("  boostmaster_config");
+            Logger::Log(LogLevel::INFO, "Help", "Available commands:");
+            Logger::Log(LogLevel::INFO, "Help", "  boostmaster_reset - Reset all statistics");
+            Logger::Log(LogLevel::INFO, "Help", "  boostmaster_printpath - Show boost pad path");
+            Logger::Log(LogLevel::INFO, "Help", "  boostmaster_showpads - Toggle boost pad visualization");
+            Logger::Log(LogLevel::INFO, "Help", "  boostmaster_report - Generate performance report");
+            Logger::Log(LogLevel::INFO, "Help", "  boostmaster_playstyle - Analyze playstyle");
+            Logger::Log(LogLevel::INFO, "Help", "  boostmaster_exportheatmap <name> - Export heatmap");
+            Logger::Log(LogLevel::INFO, "Help", "  boostmaster_performance - Show performance stats");
+            Logger::Log(LogLevel::INFO, "Help", "  boostmaster_config <option> <value> - Configure settings");
             }, "Show help message", PERMISSION_ALL);
 
         // Config handler
@@ -155,6 +193,9 @@ void BoostMaster::onLoad() {
             saveMatch();
             });
 
+        // Register advanced event hooks
+        RegisterAdvancedHooks();
+
         // UI
         hudWindow = std::make_shared<BoostHUDWindow>(this);
         settingsWindow = std::make_shared<BoostSettingsWindow>(this);
@@ -162,6 +203,16 @@ void BoostMaster::onLoad() {
         RegisterDrawables();
         LoadAllTrainingDrills();
         loadHistory();
+        
+        // Setup performance metrics update timer
+        gameWrapper->SetTimeout([this](GameWrapper* gw) {
+            UpdatePerformanceMetrics();
+            CheckCoachingTriggers();
+            if (notificationManager) {
+                notificationManager->Update(0.1f);
+            }
+            return false;
+        }, 0.1f);
     }
     catch (const std::exception& ex) {
         cvarManager->log("[BoostMaster] Error in onLoad: " + std::string(ex.what()));
@@ -169,8 +220,9 @@ void BoostMaster::onLoad() {
 }
 
 void BoostMaster::onUnload() {
+    CleanupAdvancedSystems();
     UnregisterDrawables();
-    cvarManager->log("BoostMaster: Unloaded");
+    Logger::Log(LogLevel::INFO, "Core", "BoostMaster unloaded");
 }
 
 void BoostMaster::SaveTrainingDrill(const std::string& name) {
@@ -252,7 +304,7 @@ void BoostMaster::LoadTrainingDrill(const std::string& name) {
     car.SetLocation(Vector{ drill.carX, drill.carY, drill.carZ });
     car.SetRotation(Rotator{ drill.carPitch, drill.carYaw, drill.carRoll });
     car.SetVelocity(Vector{ 0, 0, 0 });
-    car.SetAngularVelocity(Vector{ 0, 0, 0 });
+    car.SetAngularVelocity(Vector{ 0, 0, 0 }, false);
     
     // Set ball position and velocity
     ball.SetLocation(Vector{ drill.ballX, drill.ballY, drill.ballZ });
@@ -398,5 +450,384 @@ void BoostMaster::loadHistory() {
     }
     catch (const std::exception& ex) {
         cvarManager->log("[BoostMaster] Error loading history: " + std::string(ex.what()));
+    }
+}
+
+// Advanced Systems Implementation
+void BoostMaster::InitializeAdvancedSystems() {
+    notificationManager = std::make_unique<NotificationManager>();
+    heatmapGenerator = std::make_unique<HeatmapGenerator>();
+    currentSession.Reset();
+    lastUpdateTime = GetGameTime();
+    
+    Logger::Log(LogLevel::INFO, "Core", "Advanced systems initialized");
+}
+
+void BoostMaster::CleanupAdvancedSystems() {
+    if (notificationManager) {
+        notificationManager.reset();
+    }
+    if (heatmapGenerator) {
+        heatmapGenerator.reset();
+    }
+    
+    Logger::Log(LogLevel::INFO, "Core", "Advanced systems cleaned up");
+}
+
+float BoostMaster::GetGameTime() const {
+    return std::chrono::duration<float>(
+        std::chrono::steady_clock::now().time_since_epoch()).count();
+}
+
+void BoostMaster::UpdatePerformanceMetrics() {
+    PerformanceProfiler::ScopedTimer timer("UpdatePerformanceMetrics");
+    
+    if (!gameWrapper->IsInGame()) return;
+    
+    auto car = gameWrapper->GetLocalCar();
+    if (car.IsNull()) return;
+    
+    float currentTime = GetGameTime();
+    if (currentSession.sessionStartTime == 0.0f) {
+        currentSession.sessionStartTime = currentTime;
+    }
+    
+    // Track speed and position
+    Vector velocity = car.GetVelocity();
+    Vector position = car.GetLocation();
+    float speed = velocity.magnitude();
+    
+    currentSession.speedHistory.push_back(speed);
+    currentSession.positionHistory.push_back(position);
+    
+    // Record heatmap data
+    if (heatmapGenerator) {
+        heatmapGenerator->RecordPosition(position, 1.0f);
+        
+        // Track boost usage
+        float boostAmount = car.GetBoostComponent().GetCurrentBoostAmount();
+        if (lastBoostAmt > 0 && boostAmount < lastBoostAmt) {
+            float boostUsed = lastBoostAmt - boostAmount;
+            heatmapGenerator->RecordBoostUsage(position, boostUsed);
+        }
+        lastBoostAmt = (int)boostAmount;
+    }
+    
+    // Calculate distance traveled
+    if (currentSession.positionHistory.size() > 1) {
+        Vector lastPos = currentSession.positionHistory[currentSession.positionHistory.size() - 2];
+        float distance = Vector::Distance(position, lastPos);
+        currentSession.totalDistance += distance;
+    }
+    
+    // Calculate average speed
+    if (!currentSession.speedHistory.empty()) {
+        float sum = 0;
+        for (float s : currentSession.speedHistory) sum += s;
+        currentSession.averageSpeed = sum / currentSession.speedHistory.size();
+    }
+    
+    // Limit history size
+    const size_t MAX_HISTORY_SIZE = 10000;
+    if (currentSession.speedHistory.size() > MAX_HISTORY_SIZE) {
+        currentSession.speedHistory.erase(
+            currentSession.speedHistory.begin(),
+            currentSession.speedHistory.begin() + (MAX_HISTORY_SIZE / 2)
+        );
+        currentSession.positionHistory.erase(
+            currentSession.positionHistory.begin(),
+            currentSession.positionHistory.begin() + (MAX_HISTORY_SIZE / 2)
+        );
+    }
+    
+    // Invalidate cached efficiency
+    cachedEfficiency.reset();
+}
+
+void BoostMaster::AnalyzePlaystyle() {
+    float boostEfficiency = GetCurrentEfficiency();
+    
+    std::string playstyle = "Balanced";
+    if (boostEfficiency > 80.0f && currentSession.averageSpeed > 1200.0f) {
+        playstyle = "Aggressive";
+    } else if (boostEfficiency < 40.0f && currentSession.averageSpeed < 800.0f) {
+        playstyle = "Defensive";
+    } else if (currentSession.averageSpeed > 1000.0f) {
+        playstyle = "Fast-Paced";
+    } else if (boostEfficiency > 60.0f) {
+        playstyle = "Efficient";
+    }
+    
+    if (currentSession.detectedPlaystyle != playstyle) {
+        currentSession.detectedPlaystyle = playstyle;
+        Logger::Log(LogLevel::INFO, "Analytics", "Detected playstyle: " + playstyle);
+        
+        if (notificationManager) {
+            Notification notif{
+                NotificationType::Custom,
+                "Playstyle detected: " + playstyle,
+                5.0f,
+                false,
+                LinearColor{0.0f, 1.0f, 1.0f, 1.0f}
+            };
+            notificationManager->ShowNotification(notif);
+        }
+    }
+}
+
+float BoostMaster::GetCurrentEfficiency() const {
+    float currentTime = GetGameTime();
+    if (!cachedEfficiency || (currentTime - lastEfficiencyUpdate) > 1.0f) {
+        float efficiency = 0.0f;
+        if (totalBoostTime > 0.0f) {
+            efficiency = (totalBoostUsed / totalBoostTime) * 100.0f;
+        }
+        cachedEfficiency = efficiency;
+        lastEfficiencyUpdate = currentTime;
+    }
+    return *cachedEfficiency;
+}
+
+void BoostMaster::GenerateSessionReport() {
+    float sessionDuration = GetGameTime() - currentSession.sessionStartTime;
+    
+    Logger::Log(LogLevel::INFO, "Report", "=== Session Report ===");
+    Logger::Log(LogLevel::INFO, "Report", "Duration: " + std::to_string(sessionDuration) + " seconds");
+    Logger::Log(LogLevel::INFO, "Report", "Distance: " + std::to_string(currentSession.totalDistance) + " units");
+    Logger::Log(LogLevel::INFO, "Report", "Average Speed: " + std::to_string(currentSession.averageSpeed) + " units/s");
+    Logger::Log(LogLevel::INFO, "Report", "Ball Touches: " + std::to_string(currentSession.ballTouches));
+    Logger::Log(LogLevel::INFO, "Report", "Boost Efficiency: " + std::to_string(GetCurrentEfficiency()) + "%");
+    Logger::Log(LogLevel::INFO, "Report", "Playstyle: " + currentSession.detectedPlaystyle);
+    Logger::Log(LogLevel::INFO, "Report", "=====================");
+}
+
+void BoostMaster::RegisterAdvancedHooks() {
+    // Ball touch events
+    gameWrapper->HookEvent("Function TAGame.Ball_TA.OnHitGoal", 
+        [this](const std::string& eventName) {
+            OnGoalScored();
+        });
+    
+    // Car collision events
+    gameWrapper->HookEvent("Function TAGame.Car_TA.OnHitBall", 
+        [this](const std::string& eventName) {
+            OnBallHit();
+        });
+    
+    // Boost pickup events
+    gameWrapper->HookEvent("Function TAGame.VehiclePickup_Boost_TA.Pickup", 
+        [this](const std::string& eventName) {
+            OnBoostPickup();
+        });
+    
+    // Demo events
+    gameWrapper->HookEvent("Function TAGame.Car_TA.Demolish", 
+        [this](const std::string& eventName) {
+            OnCarDemolished();
+        });
+    
+    // Input events for boost tracking
+    gameWrapper->HookEventWithCaller<CarWrapper>("Function TAGame.Car_TA.SetVehicleInput",
+        [this](CarWrapper caller, void* params, const std::string& eventName) {
+            if (caller.IsNull()) return;
+            OnBoostInput(caller);
+        });
+    
+    Logger::Log(LogLevel::INFO, "Events", "Advanced event hooks registered");
+}
+
+void BoostMaster::OnGoalScored() {
+    Logger::Log(LogLevel::INFO, "Events", "Goal scored!");
+    
+    if (notificationManager) {
+        Notification notif{
+            NotificationType::GoalScored,
+            "GOAL! Great shot!",
+            3.0f,
+            true,
+            LinearColor{0.0f, 1.0f, 0.0f, 1.0f}
+        };
+        notificationManager->ShowNotification(notif);
+    }
+}
+
+void BoostMaster::OnBallHit() {
+    currentSession.ballTouches++;
+    
+    if (notificationManager && currentSession.ballTouches % 50 == 0) {
+        Notification notif{
+            NotificationType::BallHit,
+            "Ball touches: " + std::to_string(currentSession.ballTouches),
+            2.0f,
+            false,
+            LinearColor{1.0f, 1.0f, 0.0f, 1.0f}
+        };
+        notificationManager->ShowNotification(notif);
+    }
+}
+
+void BoostMaster::OnBoostPickup() {
+    // This will be called when player picks up boost pads
+    Logger::Log(LogLevel::DEBUG, "Events", "Boost pickup detected");
+}
+
+void BoostMaster::OnCarDemolished() {
+    currentSession.totalDemos++;
+    Logger::Log(LogLevel::INFO, "Events", "Car demolished! Total: " + std::to_string(currentSession.totalDemos));
+}
+
+void BoostMaster::OnBoostInput(CarWrapper caller) {
+    if (caller.IsNull()) return;
+    
+    // Track boost usage patterns
+    float boostAmount = caller.GetBoostComponent().GetCurrentBoostAmount();
+    if (boostAmount > 0) {
+        // Player is actively boosting
+    }
+}
+
+void BoostMaster::CheckCoachingTriggers() {
+    if (!gameWrapper->IsInGame()) return;
+    
+    auto car = gameWrapper->GetLocalCar();
+    if (car.IsNull() || !notificationManager) return;
+    
+    float boostAmount = car.GetBoostComponent().GetCurrentBoostAmount();
+    Vector carPos = car.GetLocation();
+    
+    // Low boost coaching
+    if (boostAmount < cvarLowBoostThresh) {
+        const auto& pads = BoostPadHelper::GetCachedPads(this);
+        float minDistance = FLT_MAX;
+        
+        for (const auto& pad : pads) {
+            float dist = Vector::Distance(carPos, pad.location);
+            if (dist < minDistance) {
+                minDistance = dist;
+            }
+        }
+        
+        if (minDistance < 1000.0f && minDistance > 0.0f) {
+            static float lastLowBoostNotif = 0.0f;
+            float currentTime = GetGameTime();
+            
+            if (currentTime - lastLowBoostNotif > 5.0f) { // Don't spam notifications
+                Notification notif{
+                    NotificationType::LowBoost,
+                    "Boost pad nearby - " + std::to_string((int)minDistance) + " units",
+                    3.0f,
+                    false,
+                    LinearColor{1.0f, 1.0f, 0.0f, 1.0f}
+                };
+                notificationManager->ShowNotification(notif);
+                lastLowBoostNotif = currentTime;
+            }
+        }
+    }
+    
+    // High efficiency praise
+    float efficiency = GetCurrentEfficiency();
+    if (efficiency > 85.0f) {
+        static float lastEfficiencyNotif = 0.0f;
+        float currentTime = GetGameTime();
+        
+        if (currentTime - lastEfficiencyNotif > 30.0f) {
+            Notification notif{
+                NotificationType::HighEfficiency,
+                "Excellent boost efficiency: " + std::to_string((int)efficiency) + "%!",
+                4.0f,
+                false,
+                LinearColor{0.0f, 1.0f, 0.0f, 1.0f}
+            };
+            notificationManager->ShowNotification(notif);
+            lastEfficiencyNotif = currentTime;
+        }
+    }
+}
+
+void BoostMaster::RenderAdvancedOverlay(CanvasWrapper canvas) {
+    if (!gameWrapper->IsInGame()) return;
+    
+    auto car = gameWrapper->GetLocalCar();
+    if (car.IsNull()) return;
+    
+    Vector2 screenSize = canvas.GetSize();
+    
+    // Draw boost efficiency gauge
+    DrawBoostEfficiencyGauge(canvas, screenSize);
+    
+    // Draw world space indicators
+    DrawWorldSpaceIndicators(canvas);
+    
+    // Render notifications
+    if (notificationManager) {
+        notificationManager->RenderNotifications(canvas);
+    }
+}
+
+void BoostMaster::DrawBoostEfficiencyGauge(CanvasWrapper canvas, Vector2 screenSize) {
+    float efficiency = GetCurrentEfficiency();
+    
+    // Gauge position (top-right corner)
+    Vector2 gaugePos = {screenSize.X - 200, 50};
+    Vector2 gaugeSize = {150, 20};
+    
+    // Background
+    canvas.SetColor(LinearColor{0.2f, 0.2f, 0.2f, 0.8f});
+    canvas.DrawRect(gaugePos, gaugeSize);
+    
+    // Efficiency bar
+    float efficiencyPercent = std::min(1.0f, efficiency / 100.0f);
+    Vector2 barSize = {gaugeSize.X * efficiencyPercent, gaugeSize.Y};
+    
+    // Color based on efficiency
+    LinearColor barColor = efficiency > 75.0f ? 
+        LinearColor{0.0f, 1.0f, 0.0f, 1.0f} :  // Green
+        efficiency > 50.0f ?
+        LinearColor{1.0f, 1.0f, 0.0f, 1.0f} :  // Yellow
+        LinearColor{1.0f, 0.0f, 0.0f, 1.0f};   // Red
+    
+    canvas.SetColor(barColor);
+    canvas.DrawRect(gaugePos, barSize);
+    
+    // Text overlay
+    canvas.SetColor(LinearColor{1.0f, 1.0f, 1.0f, 1.0f});
+    canvas.SetPosition(gaugePos + Vector2{5, 2});
+    canvas.DrawString("Efficiency: " + std::to_string((int)efficiency) + "%");
+}
+
+void BoostMaster::DrawWorldSpaceIndicators(CanvasWrapper canvas) {
+    const auto& pads = BoostPadHelper::GetCachedPads(this);
+    
+    for (const auto& pad : pads) {
+        Vector2 screenPos = canvas.Project(pad.location);
+        Vector2 screenSize = canvas.GetSize();
+        
+        if (screenPos.X >= 0 && screenPos.X <= screenSize.X && 
+            screenPos.Y >= 0 && screenPos.Y <= screenSize.Y) {
+            
+            float radius = pad.type == PadType::Big ? 15.0f : 8.0f;
+            LinearColor color = pad.type == PadType::Big ? 
+                LinearColor{1.0f, 0.5f, 0.0f, 0.8f} :  // Orange for big pads
+                LinearColor{0.0f, 0.5f, 1.0f, 0.8f};   // Blue for small pads
+            
+            canvas.SetColor(color);
+            canvas.DrawCircle(screenPos, radius);
+        }
+    }
+}
+
+template<typename T>
+std::optional<T> BoostMaster::SafeWrapperCall(std::function<T()> func, const std::string& context) {
+    try {
+        return func();
+    }
+    catch (const std::exception& e) {
+        Logger::Log(LogLevel::ERROR, context, "Exception: " + std::string(e.what()));
+        return std::nullopt;
+    }
+    catch (...) {
+        Logger::Log(LogLevel::ERROR, context, "Unknown exception occurred");
+        return std::nullopt;
     }
 }

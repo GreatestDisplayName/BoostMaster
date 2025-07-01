@@ -1,5 +1,6 @@
 #include "pch.h"
 #include "BoostHUDWindow.h"
+#include "BoostMaster.h"
 #include "imgui/imgui.h"
 #include "BoostPadHelper.h"
 #include <vector>
@@ -16,7 +17,7 @@ void DrawHistogram(const std::vector<float>& data, const char* label) {
 void BoostHUDWindow::Render() {
     // Draw path overlay if path exists
     if (!plugin->lastPath.empty()) {
-        BoostPadHelper::DrawPathOverlay(plugin, plugin->lastPath);
+        BoostPadHelper::DrawPathOverlay(plugin);
     }
     ImGui::Begin("Boost Stats");
     ImGui::Text("Total Used: %.1f", plugin->totalBoostUsed);

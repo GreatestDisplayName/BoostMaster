@@ -4,6 +4,20 @@
 #include "bakkesmod/plugin/pluginwindow.h"
 
 /*
+ * GuiBase:
+ * Simple base class for UI components.
+ * Provides a virtual Render() method that derived classes should implement.
+ */
+class GuiBase
+{
+public:
+    virtual ~GuiBase() = default;
+    
+    // Pure virtual function: Derived classes must implement this to render their content.
+    virtual void Render() = 0;
+};
+
+/*
  * SettingsWindowBase:
  * Base class for plugin settings windows.
  * Provides a default plugin name and an interface for setting the ImGui context.

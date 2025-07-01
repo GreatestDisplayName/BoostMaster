@@ -48,28 +48,14 @@ void BoostPadHelper::DrawPath(BoostMaster* plugin, const std::vector<int>& path)
     }
 }
 
-void BoostPadHelper::DrawPathOverlay(BoostMaster* plugin, const std::vector<int>& path) {
+void BoostPadHelper::DrawPathOverlay(BoostMaster* plugin) {
     if (!plugin || !plugin->gameWrapper) return;
     const auto& pads = GetCachedPads(plugin);
+    const auto& path = plugin->lastPath;
     if (pads.empty() || path.size() < 2) return;
 
-    auto gw = plugin->gameWrapper;
-    float thickness = BoostSettingsWindow::GetOverlaySize();
-
-    for (size_t i = 1; i < path.size(); ++i) {
-        int idx1 = path[i - 1];
-        int idx2 = path[i];
-        if (idx1 < 0 || idx1 >= (int)pads.size() || idx2 < 0 || idx2 >= (int)pads.size()) continue;
-
-        Vector v1 = pads[idx1].location;
-        Vector v2 = pads[idx2].location;
-
-        // Project 3D world coords to 2D screen coords
-        Vector2 screen1 = gw->ProjectWorldToScreen(v1);
-        Vector2 screen2 = gw->ProjectWorldToScreen(v2);
-
-        gw->DrawLine(screen1, screen2, thickness, Color(0, 255, 0, 255)); // green line
-    }
+    // This function is called from a render context, so we just store the path
+    // The actual drawing is done in DrawPathOverlayCanvas
 }
 
 void BoostPadHelper::DrawPathOverlayCanvas(BoostMaster* plugin, CanvasWrapper canvas, const std::vector<int>& path) {
@@ -87,6 +73,7 @@ void BoostPadHelper::DrawPathOverlayCanvas(BoostMaster* plugin, CanvasWrapper ca
     if (screenPoints.size() < 2) return;
 
     float thickness = BoostSettingsWindow::GetOverlaySize();
+    canvas.SetColor(LinearColor{0.0f, 1.0f, 0.0f, 1.0f}); // Green color
     for (size_t i = 1; i < screenPoints.size(); ++i) {
         canvas.DrawLine(screenPoints[i - 1], screenPoints[i], thickness);
     }
