@@ -252,7 +252,7 @@ void BoostMaster::LoadTrainingDrill(const std::string& name) {
     car.SetLocation(Vector{ drill.carX, drill.carY, drill.carZ });
     car.SetRotation(Rotator{ drill.carPitch, drill.carYaw, drill.carRoll });
     car.SetVelocity(Vector{ 0, 0, 0 });
-    car.SetAngularVelocity(Vector{ 0, 0, 0 });
+    car.SetAngularVelocity(Vector{ 0, 0, 0 }, false);
     
     // Set ball position and velocity
     ball.SetLocation(Vector{ drill.ballX, drill.ballY, drill.ballZ });

@@ -9,6 +9,7 @@
 #include "BoostPadHelper.h"
 
 // Forward declarations to avoid circular dependencies
+class BoostPadHelper;
 class BoostHUDWindow;
 class BoostSettingsWindow;
 
@@ -28,6 +29,7 @@ public:
     void ResetStats();
     void PrintPadPath();
     void saveMatch();
+    void loadHistory();
 
     void SaveTrainingDrill(const std::string& name);
     void LoadTrainingDrill(const std::string& name);

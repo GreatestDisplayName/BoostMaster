@@ -1,26 +1,24 @@
 #pragma once
-#include "bakkesmod/plugin/PluginSettingsWindow.h"
-#include "BoostPadData.h"
-#include <string>
+
+#include "GuiBase.h"
 #include <optional>
 
-extern int pathAlgo; // Expose pathAlgo for adaptive pathfinding
-
-// Forward declaration to avoid circular dependency
+// Forward declarations
 class BoostMaster;
+enum class PadType;
 
-class BoostSettingsWindow : public BakkesMod::Plugin::PluginSettingsWindow {
+class BoostSettingsWindow : public GuiBase {
 public:
-    explicit BoostSettingsWindow(BoostMaster* plugin) { this->plugin = plugin; }
-    void Render();
-    void RenderSettings() override { Render(); }
-    std::string GetPluginName() override { return "BoostMaster"; }
-    void SetImGuiContext(uintptr_t) override {}
+    BoostSettingsWindow(BoostMaster* plugin) : plugin(plugin) {}
+    void Render() override;
+
+    // Static methods for accessing settings
     static bool ShouldShowPads();
     static std::optional<PadType> GetPadTypeFilter();
-    static void ToggleShowPads();
     static const float* GetOverlayColor();
     static float GetOverlaySize();
+    static void ToggleShowPads();
+
 private:
     BoostMaster* plugin;
 };
