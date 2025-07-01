@@ -64,6 +64,7 @@
     </PreBuildEvent>
   </ItemDefinitionGroup>
   <ItemGroup>
+    <ClCompile Include="AdvancedSystems.cpp" />
     <ClCompile Include="BoostHUDWindow.cpp" />
     <ClCompile Include="BoostMasterUI.cpp" />
     <ClCompile Include="BoostPadGraph.cpp" />
