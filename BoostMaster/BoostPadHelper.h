@@ -1,10 +1,12 @@
 #pragma once
 
-#include "BoostMaster.h"
 #include "BoostPadData.h"
+#include "bakkesmod/wrappers/CanvasWrapper.h"
 #include <vector>
 #include <optional>
-#include "bakkesmod/wrappers/CanvasWrapper.h"
+
+// Forward declaration to avoid circular dependency
+class BoostMaster;
 
 class BoostPadHelper {
 public:
@@ -18,7 +20,7 @@ public:
     static void DrawPath(BoostMaster* plugin, const std::vector<int>& path);
 
     // Draw a path overlay on the HUD (2D screen lines)
-    static void DrawPathOverlay(BoostMaster* plugin, const std::vector<int>& path);
+    static void DrawPathOverlay(BoostMaster* plugin);
 
     // Draw a path overlay on the HUD (2D screen lines) using CanvasWrapper
     static void DrawPathOverlayCanvas(BoostMaster* plugin, CanvasWrapper canvas, const std::vector<int>& path);
